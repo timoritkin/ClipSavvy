@@ -1,0 +1,22 @@
+[
+    {
+        "id": "69449af4-8173-4006-8853-f837629f33b7",
+        "timestamp": "2025-02-25T20:42:20.899997",
+        "content": "    \"\"\"Saves the clipboard entry to a JSON file.\"\"\"\n"
+    },
+    {
+        "id": "5e2b0fea-2144-4b19-ba2c-fe15d20b267d",
+        "timestamp": "2025-02-25T20:42:44.963350",
+        "content": "https://chatgpt.com/c/67bdd42d-5b88-8010-81e8-56e8cacf5cfe"
+    },
+    {
+        "id": "c89eb4b5-28d3-4a27-b8e0-f5fa7e9e8a5b",
+        "timestamp": "2025-02-25T20:43:02.786663",
+        "content": "\r\n    # If file exists, load existing data\r\n    if os.path.exists(JSON_FILE):\r\n        with open(JSON_FILE, \"r\", encoding=\"utf-8\") as f:\r\n            try:\r\n                data = json.load(f)\r\n            except json.JSONDecodeError:\r\n                data = []\r\n\r\n    # Append the new clipboard entry\r\n    data.append(clipboard_entry.to_dict())\r\n\r\n    # Write back to the file"
+    },
+    {
+        "id": "2cc21385-2d30-4ab5-9be7-3b1243d88f3d",
+        "timestamp": "2025-02-25T20:43:25.370948",
+        "content": "\r\nChatGPT\r\n\r\nExplore GPTs\r\nToday\r\n"
+    }
+]
