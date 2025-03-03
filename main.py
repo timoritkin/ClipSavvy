@@ -31,7 +31,7 @@ class MainWindow(QMainWindow):
 
         self.masterLayout = QGridLayout()
         self.masterLayout.addLayout(self.menuLayout, 0, 0)
-        self.masterLayout.addLayout(self.framesLayout, 0, 1)
+        self.masterLayout.addLayout(self.framesLayout, 1, 0)
 
         # Set the layout on the central widget
         self.centralWidget.setLayout(self.masterLayout)
@@ -45,16 +45,30 @@ class MainWindow(QMainWindow):
         self.menuLayout.addWidget(self.image_button, 1, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.settings_button, 0, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
 
-    def add_new_clip_frame(self):
-        self.frame = QFrame()
-        self.frame.setMinimumSize((QSize(200, 200)))
-        self.frame.setMaximumSize((QSize(200, 200)))
-        self.frame.setStyleSheet("background-color: rgb(255,85,255);")
-        self.frame.setFrameShape(QFrame.Box)
-        self.frame.setFrameShadow(QFrame.Sunken)
-        self.frame.setLineWidth(3)
-        self.framesLayout.addWidget(self.frame)
+    def add_new_clip_frame(self, clipboard_data):
+        # Create a new frame
+        frame = QFrame()
+        frame.setMinimumSize(QSize(200, 200))
+        frame.setMaximumSize(QSize(200, 200))
+        frame.setFrameShape(QFrame.Shape.Box)
+        frame.setLineWidth(3)
+        frame.setStyleSheet("background-color: rgb(255,85,255);")
 
+        # Create a layout for the frame
+        frame_layout = QVBoxLayout(frame)
+
+        # Add content to the frame
+        if isinstance(clipboard_data, str):
+            label = QLabel(clipboard_data)
+            label.setWordWrap(True)  # Enable word wrapping for text
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            frame_layout.addWidget(label)
+
+        # Add the frame to the main layout
+        self.framesLayout.addWidget(frame)
+
+        # Force layout update
+        self.framesLayout.update()
     def update_gui(self):
         # Update your GUI elements here (e.g., based on clipboard changes)
         pass
@@ -70,7 +84,8 @@ def start_gui():
     timer.start(1000)
 
     # Start clipboard monitoring in a background thread
-    clipboard_thread = threading.Thread(target=clipboard.check_clipboard, daemon=True)
+    clipboard_thread = threading.Thread(target=clipboard.check_clipboard, args=(window,),
+                                        daemon=True)  # Pass window to the thread
     clipboard_thread.start()
 
     # Start keyboard hotkey listener in a background thread

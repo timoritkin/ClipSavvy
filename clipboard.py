@@ -5,16 +5,15 @@ import time
 import uuid
 from datetime import datetime
 import json
-
+from main import MainWindow
 import keyboard
 import pyperclip
 from PIL import ImageGrab, Image
-import main
 JSON_FILE = "clipboard_history.json"
 
 
 # Function to check clipboard contents
-def check_clipboard(self):
+def check_clipboard(window):
     last_clipboard_content = ""
     last_img_content = ""
     while True:
@@ -26,7 +25,7 @@ def check_clipboard(self):
             ce = ClipboardEntry(current_clipboard_content, None)
             ce.to_dict()
             save_to_json_file(ce)
-            main.MainWindow.add_new_clip_frame
+            window.add_new_clip_frame(current_clipboard_content)  # Pass clipboard text to the window
         if last_img_content != img:
             print(f"Clipboard changed: {img}")
             last_img_content = img
