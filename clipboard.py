@@ -5,15 +5,15 @@ import time
 import uuid
 from datetime import datetime
 import json
-from main import MainWindow
 import keyboard
 import pyperclip
 from PIL import ImageGrab, Image
+
 JSON_FILE = "clipboard_history.json"
 
 
 # Function to check clipboard contents
-def check_clipboard(window):
+def check_clipboard():
     last_clipboard_content = ""
     last_img_content = ""
     while True:
@@ -25,7 +25,6 @@ def check_clipboard(window):
             ce = ClipboardEntry(current_clipboard_content, None)
             ce.to_dict()
             save_to_json_file(ce)
-            window.add_new_clip_frame(current_clipboard_content)  # Pass clipboard text to the window
         if last_img_content != img:
             print(f"Clipboard changed: {img}")
             last_img_content = img
@@ -67,21 +66,23 @@ def load_from_json_file(filename="clipboard_history.json"):
         return []
 
 
-def on_copy():
-    """Triggers when Ctrl+C is pressed."""
-    time.sleep(0.05)  # Wait 50ms to ensure clipboard updates
-    currently_copied_content = pyperclip.paste()
-    print(currently_copied_content)
-    ce = ClipboardEntry(currently_copied_content)
-    ce.to_dict()
-    save_to_json_file(ce)
-    print(currently_copied_content)
-    return False  # Stop listening if needed
+# dont need it
+# def on_ctrl_c():
+#     """Triggers when Ctrl+C is pressed."""
+#     time.sleep(0.05)  # Wait 50ms to ensure clipboard updates
+#     currently_copied_content = pyperclip.paste()
+#     print(currently_copied_content)
+#     ce = ClipboardEntry(currently_copied_content)
+#     ce.to_dict()
+#     save_to_json_file(ce)
+#     return False  # Stop listening if needed
+#
+#
+# def start_hotkeys():
+#     # Set up the hotkey listener
+#     keyboard.add_hotkey('ctrl+c', on_ctrl_c)
+#     keyboard.wait()
 
-def start_hotkeys():
-    # Set up the hotkey listener
-    keyboard.add_hotkey('ctrl+c', on_copy)
-    keyboard.wait()
 
 def _convert_image_to_bytes(image):
     """Converts an image to bytes for storage."""
@@ -93,13 +94,11 @@ def _convert_image_to_bytes(image):
 
 
 class ClipboardEntry:
-    def __init__(self, main_window, content=None, image=None):
+    def __init__(self, content=None, image=None):
         self.id = str(uuid.uuid4())  # Generate a unique ID
         self.timestamp = datetime.now().isoformat()  # Store timestamp
         self.content = content  # Store text
         self.image = _convert_image_to_bytes(image) if image else None  # Store image as bytes
-        self.main_window = main_window
-
 
     def to_dict(self):
         """Convert object to dictionary for JSON storage."""
@@ -129,8 +128,6 @@ class ClipboardEntry:
         entry.timestamp = data["timestamp"]
         entry.image = data["image"]
         return entry
-
-
 
     # while True:
     #     # Start listening for key presses
