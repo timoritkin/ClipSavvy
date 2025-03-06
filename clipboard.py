@@ -98,7 +98,7 @@ class ClipboardEntry:
         self.id = str(uuid.uuid4())  # Generate a unique ID
         self.timestamp = datetime.now().isoformat()  # Store timestamp
         self.content = content  # Store text
-        self.image = _convert_image_to_bytes(image) if image else None  # Store image as bytes
+        # self.image = _convert_image_to_bytes(image) if image else None  # Store image as bytes
 
     def to_dict(self):
         """Convert object to dictionary for JSON storage."""
@@ -106,14 +106,14 @@ class ClipboardEntry:
             "id": self.id,
             "timestamp": self.timestamp,
             "content": self.content,
-            "image": self.image_to_base64()  # Convert image to Base64 string
+            # "image": self.image_to_base64()  # Convert image to Base64 string
         }
 
-    def image_to_base64(self):
-        """Converts image bytes to a Base64 string."""
-        if self.image:
-            return base64.b64encode(self.image).decode('utf-8')  # Encode bytes to Base64 string
-        return None
+    # def image_to_base64(self):
+    #     """Converts image bytes to a Base64 string."""
+    #     if self.image:
+    #         return base64.b64encode(self.image).decode('utf-8')  # Encode bytes to Base64 string
+    #     return None
 
     @staticmethod
     def from_base64(self, base64_string):
@@ -126,7 +126,7 @@ class ClipboardEntry:
         entry = cls(content=data["content"])
         entry.id = data["id"]
         entry.timestamp = data["timestamp"]
-        entry.image = data["image"]
+        # entry.image = data["image"]
         return entry
 
     # while True:
