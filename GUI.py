@@ -1,18 +1,11 @@
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QWidget, QGridLayout, QFrame, QScrollArea,
-                             QHBoxLayout, QVBoxLayout)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QObject
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QGridLayout, QVBoxLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QObject, QRect
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
+                             QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea)
 import sys
 import clipboard
 
 
-class CustomFrame(QWidget):
-
-    def __init__(self):
-        super().__init__()
-        self.selected_frame
 
 
 class Mouse(QtCore.QObject):
@@ -53,15 +46,17 @@ class ClipboardContainer(QWidget):
         self.main_layout.addWidget(self.scroll_area)
         self.setLayout(self.main_layout)
 
+        self.scroll_content.setMouseTracking(True)
+        self.scroll_content.installEventFilter(self)
+
         self.clips = clipboard.load_from_json_file()
         self.frames = {}  # Store frames with their associated data
 
-        self.populate_clips()
-        self.find_frame()
         # mouse event when press on frame
         self.pressPos = None
         self.clicked = QtCore.pyqtSignal()
 
+        self.populate_clips()
         # Timer to check for new clipboard content
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_for_updates)  # type: ignore
@@ -74,16 +69,16 @@ class ClipboardContainer(QWidget):
 
     def add_clip_frame(self, clip, id):
         """Dynamically add a frame for a new clipboard entry"""
-        frame = QFrame()
-        frame.setMinimumSize(QSize(200, 200))
-        frame.setObjectName(str(id))
-        frame.setMaximumSize(QSize(200, 200))
-        frame.setFrameShape(QFrame.Shape.Box)
-        frame.setLineWidth(3)
-        frame.setStyleSheet("background-color: rgb(255,85,255);")
+        self.frame = QFrame()
+        self.frame.setMinimumSize(QSize(200, 200))
+        self.frame.setObjectName(str(id))
+        self.frame.setMaximumSize(QSize(200, 200))
+        self.frame.setFrameShape(QFrame.Shape.Box)
+        self.frame.setLineWidth(3)
+        self.frame.setStyleSheet("background-color: rgb(255,85,255);")
 
         # Add content label
-        label = QLabel(str(clip.content), frame)
+        label = QLabel(str(clip.content), self.frame)
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -95,11 +90,11 @@ class ClipboardContainer(QWidget):
         frame_layout = QVBoxLayout()
         frame_layout.addWidget(label)
         # frame_layout.addWidget(remove_button)
-        frame.setLayout(frame_layout)
+        self.frame.setLayout(frame_layout)
 
         # Add frame to layout and store reference
-        self.scroll_layout.addWidget(frame)
-        self.frames[clip.id] = frame  # Store frame with its ID
+        self.scroll_layout.addWidget(self.frame)
+        self.frames[clip.id] = self.frame  # Store frame with its ID
 
     # def remove_clip(self, clip, frame):
     #     """Remove clipboard entry from UI and storage"""
@@ -122,25 +117,60 @@ class ClipboardContainer(QWidget):
             self.clips = new_clips  # Update internal list
 
     def mousePressEvent(self, event):
-        # Get the event's position relative to the scroll area
-        event_pos = event.pos()
-        # Adjust for the scroll offset of the scroll area
+        # First, get the position relative to the scroll_content widget
+        global_pos = self.mapToGlobal(event.pos())
+        content_pos = self.scroll_content.mapFromGlobal(global_pos)
+
+        # Add scroll offset to the y-coordinate
         scroll_offset = self.scroll_area.verticalScrollBar().value()
-        # Map the position relative to the global coordinates, considering the scroll offset
-        global_pos = self.scroll_content.mapToGlobal(event_pos)
-        global_pos.setY(global_pos.y() + scroll_offset)
+        content_pos.setY(content_pos.y() + scroll_offset)
 
         if event.button() == Qt.MouseButton.LeftButton:
-            self.pressPos = global_pos
+            self.pressPos = content_pos
+            print(f"Click position in content coordinates: {self.pressPos}")
             self.find_frame()
-            print(self.pressPos)
+
+    def eventFilter(self, source, event):
+        if source == self.scroll_content and event.type() == QtCore.QEvent.Type.MouseButtonPress:
+            self.handleMousePressInContent(event)
+            return True
+        return super().eventFilter(source, event)
+
+    def handleMousePressInContent(self, event):
+        # This already gives us the position relative to the visible part of the scroll content
+        content_pos = event.pos()
+
+        # Add scroll offset to get the absolute position within the entire scroll content
+        scroll_offset = self.scroll_area.verticalScrollBar().value()
+
+        # Create a new point that includes the scroll offset
+        absolute_pos = QtCore.QPoint(content_pos.x(), content_pos.y())
+
+        print(f"Visible position: {content_pos}")
+        print(f"Scroll offset: {scroll_offset}")
+        print(f"Absolute position: {absolute_pos}")
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.pressPos = absolute_pos
+            print(f"Click position in content: {self.pressPos}")
+            self.find_frame()
 
     def find_frame(self):
+        if self.pressPos is None:
+            return
 
         for clip_id in self.frames:
             frame = self.frames[clip_id]
-            frame_position = frame.pos()  # Returns QPoint(x, y)
+            frame_position = frame.pos()
             print(f"Frame Position: {frame_position.x()}, {frame_position.y()}")
+
+            frame_rect = QRect(frame_position.x(), frame_position.y(),
+                               frame.width(), frame.height())
+            if frame_rect.contains(self.pressPos):
+                print(f"Clicked on frame: {clip_id}")
+                # Access the content using the clip_id as a key
+                if clip_id in self.clips:
+                    print(self.clips[clip_id].content)
 
 
 class MainWindow(QMainWindow):
