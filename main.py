@@ -14,14 +14,14 @@ def on_click(icon, item):
         clipboard_thread = threading.Thread(target=clipboard.check_clipboard)  # Pass window to the thread
         clipboard_thread.start()
 
-    elif str(item) == "my clips":
+    elif str(item) == "My clipboards":
         gui_thread = threading.Thread(target=GUI.start_gui, daemon=True)
         gui_thread.start()
 
 
 icon = pystray.Icon("ClipSavvy", image, menu=pystray.Menu(
     pystray.MenuItem("Start", on_click),
-    pystray.MenuItem("my clips", on_click)
+    pystray.MenuItem("My clipboards", on_click)
 ))
 
 icon.run()

@@ -3,13 +3,16 @@ import io
 import os
 import time
 import uuid
-from datetime import datetime
 import json
-import keyboard
 import pyperclip
 from PIL import ImageGrab, Image
 
 JSON_FILE = "clipboard_history.json"
+
+
+# Function will set new clipboard to paste that user selected from its list
+def attach_new_clipboard(to_paste):
+    pyperclip.copy(to_paste)
 
 
 # Function to check clipboard contents
@@ -61,27 +64,10 @@ def load_from_json_file(filename="clipboard_history.json"):
     try:
         with open(filename, "r") as file:
             data = json.load(file)
+            # Create a list of ClipboardEntry objects from the loaded data
             return [ClipboardEntry.from_dict(entry) for entry in data]
     except (FileNotFoundError, json.JSONDecodeError):
         return []
-
-
-# dont need it
-# def on_ctrl_c():
-#     """Triggers when Ctrl+C is pressed."""
-#     time.sleep(0.05)  # Wait 50ms to ensure clipboard updates
-#     currently_copied_content = pyperclip.paste()
-#     print(currently_copied_content)
-#     ce = ClipboardEntry(currently_copied_content)
-#     ce.to_dict()
-#     save_to_json_file(ce)
-#     return False  # Stop listening if needed
-#
-#
-# def start_hotkeys():
-#     # Set up the hotkey listener
-#     keyboard.add_hotkey('ctrl+c', on_ctrl_c)
-#     keyboard.wait()
 
 
 def _convert_image_to_bytes(image):
@@ -94,10 +80,10 @@ def _convert_image_to_bytes(image):
 
 
 class ClipboardEntry:
-    def __init__(self, content=None, image=None):
-        self.id = str(uuid.uuid4())  # Generate a unique ID
-        self.timestamp = datetime.now().isoformat()  # Store timestamp
-        self.content = content  # Store text
+    def __init__(self, content, id=None, timestamp=None):
+        self.content = content
+        self.id = id if id is not None else str(uuid.uuid4())  # Generate a unique ID if not provided
+        self.timestamp = timestamp if timestamp is not None else time.time()  # Use current time if timestamp is None
         # self.image = _convert_image_to_bytes(image) if image else None  # Store image as bytes
 
     def to_dict(self):
@@ -106,7 +92,6 @@ class ClipboardEntry:
             "id": self.id,
             "timestamp": self.timestamp,
             "content": self.content,
-            # "image": self.image_to_base64()  # Convert image to Base64 string
         }
 
     # def image_to_base64(self):
@@ -123,14 +108,6 @@ class ClipboardEntry:
     @classmethod
     def from_dict(cls, data):
         """Convert dictionary back to a ClipboardEntry object."""
-        entry = cls(content=data["content"])
-        entry.id = data["id"]
-        entry.timestamp = data["timestamp"]
-        # entry.image = data["image"]
+        entry = cls(content=data["content"], id=data["id"], timestamp=data["timestamp"])
+        # If you're handling images, you might want to set `entry.image` here
         return entry
-
-    # while True:
-    #     # Start listening for key presses
-    #     keyboard.add_hotkey('ctrl+c', on_copy)
-    #     # Keep the program running
-    #     keyboard.wait()
