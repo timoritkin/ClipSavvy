@@ -1,9 +1,18 @@
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
-                             QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea)
+                             QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea
+, QCheckBox, QHBoxLayout, QSizePolicy, QMessageBox)
 import sys
 import clipboard
+
+
+def show_message(message):
+    msg_box = QMessageBox()
+    msg_box.setWindowTitle("Information")
+    msg_box.setText(f"{message}")
+    msg_box.setIcon(QMessageBox.Icon.Information)
+    msg_box.exec()  # Show the message box
 
 
 class Mouse(QtCore.QObject):
@@ -44,20 +53,29 @@ class ClipInFrame(QWidget):
         label = QLabel(str(clip.content), self.frame)
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.checkbox = QCheckBox(self)
+        self.checkbox.stateChanged.connect(self.on_checkbox_changed)  # type: ignore
+        self.checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.frameSelected = False
+
         # Remove button
         # remove_button = QPushButton("Remove", frame)
         # remove_button.clicked.connect(lambda: self.remove_clip(clip, frame))  # type: ignore
 
         # Layout for frame
-        frame_layout = QVBoxLayout()
+        frame_layout = QHBoxLayout()
         frame_layout.addWidget(label)
+        frame_layout.addWidget(self.checkbox)
         # frame_layout.addWidget(remove_button)
         self.frame.setLayout(frame_layout)
 
-        # # Add frame to layout and store reference
-        # self.scroll_layout.addWidget(self.frame)
-        # self.frames[clip.id] = self.frame  # Store frame with its ID
-        #
+    def on_checkbox_changed(self, state):
+        if self.checkbox.isChecked():
+            print("Checkbox is checked ")
+            self.frameSelected = True
+        else:
+            print("Checkbox is unchecked ")
+            self.frameSelected = False
 
 
 # this class hold all frames and clipboards
@@ -104,17 +122,6 @@ class ClipboardContainer(QWidget):
             self.frames[clip.id] = clip_frame.frame
             self.clips[clip.id] = clip_frame  # Store the whole ClipInFrame, not just the frame
 
-    # def remove_clip(self, clip, frame):
-    #     """Remove clipboard entry from UI and storage"""
-    #     if clip['id'] in self.frames:
-    #         self.scroll_layout.removeWidget(frame)
-    #         frame.deleteLater()
-    #         del self.frames[clip['id']]
-    #
-    #         # Remove from JSON storage
-    #         self.records_json = [c for c in self.records_json if c['id'] != clip['id']]
-    #         clipboard.save_to_json_file(self.records_json)
-
     def check_for_updates(self):
         """Check if clipboard file has new entries"""
         new_clips = clipboard.load_from_json_file()
@@ -123,14 +130,38 @@ class ClipboardContainer(QWidget):
         if len(new_clips) > len(self.records_json):
             for clip in new_clips:
                 if clip.id not in self.frames:  # Only add new records_json that don't have a frame yet
-                    clip_frame = ClipInFrame(clip, len(self.records_json))  # or use i if you want to keep index
+                    clip_frame = ClipInFrame(clip)  # or use i if you want to keep index
                     self.frames[clip.id] = clip_frame  # Store reference in frames dictionary
+                    self.clips[clip.id] = clip_frame  # Store the whole ClipInFrame, not just the frame
                     self.scroll_layout.addWidget(clip_frame.frame)  # Add the frame to layout
 
             self.records_json = new_clips  # Update internal list of records_json
             self.scroll_area.setWidgetResizable(True)  # Ensure the scroll area resizes when new widgets are added
             self.scroll_content.setMinimumHeight(self.scroll_layout.sizeHint().height())  # Update scroll content size
-            self.populate_clips()
+            # self.populate_clips()
+
+    def toggle_delete_mode(self):
+        to_delete = []  # Collect items to delete first
+
+        for clip_id, frame in list(self.clips.items()):  # Loop through frames by clip_id
+            if self.clips[clip_id].frameSelected:
+                to_delete.append(clip_id)  # Store the ID for deletion
+        # if the list is empty messagebox will appear
+        if not to_delete:
+            show_message("Please select items to delete from the clipboard")
+
+        for clip_id in to_delete:
+            frame = self.clips[clip_id].frame  # Store reference before deleting
+
+            # Remove from layout and delete the widget
+            self.scroll_layout.removeWidget(frame)
+            frame.deleteLater()  # Properly delete the frame
+            # Remove from dictionary
+            del self.clips[clip_id]
+            del self.frames[clip_id]
+
+            # Remove from clipboard JSON
+            clipboard.remove_entries_by_id("clipboard_history.json", clip_id)
 
     def mousePressEvent(self, event):
         # First, get the position relative to the scroll_content widget
@@ -209,6 +240,8 @@ class MainWindow(QMainWindow):
         self.setContentsMargins(20, 20, 20, 20)
         # self.setMinimumSize(400, 700)
 
+
+
         # Create a central widget
         self.centralWidget = QWidget()
         self.setCentralWidget(self.centralWidget)
@@ -223,17 +256,25 @@ class MainWindow(QMainWindow):
 
         # Buttons
         self.text_button = QPushButton(text="Text")
+        self.delete_button = QPushButton(text="Delete")
         self.image_button = QPushButton("Images")
         self.settings_button = QPushButton("Settings")
 
         self.menuLayout.addWidget(self.text_button, 1, 0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
+        self.menuLayout.addWidget(self.delete_button, 0, 0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.image_button, 1, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.settings_button, 0, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         clipboardContainer = ClipboardContainer()
         self.masterLayout.addWidget(clipboardContainer)
 
+        # Initialize QTimer
+        # self.timer = QTimer(self)  # Create a timer associated with the window
+        # self.timer.timeout.connect(ClipboardContainer.check_for_updates(self))   # type: ignore
+        # self.timer.start(1000)  # Start the timer and check every 1 second (1000 ms)
+
         # Set the layout on the central widget
         self.centralWidget.setLayout(self.masterLayout)
+        self.delete_button.clicked.connect(clipboardContainer.toggle_delete_mode)  # type: ignore
 
 
 def start_gui():
@@ -243,6 +284,4 @@ def start_gui():
     sys.exit(app.exec())
 
 
-if __name__ == "__main__":
-    # Start the Qt GUI in the main thread
-    start_gui()
+

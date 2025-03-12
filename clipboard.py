@@ -10,6 +10,19 @@ from PIL import ImageGrab, Image
 JSON_FILE = "clipboard_history.json"
 
 
+def remove_entries_by_id(json_file, ids_to_delete):
+    # Load existing clipboard history
+    with open(json_file, "r") as file:
+        clipboard_data = json.load(file)
+
+        # Keep only entries whose ID is NOT in `ids_to_delete`
+    clipboard_data = [entry for entry in clipboard_data if entry["id"] not in ids_to_delete]
+
+    # Save the updated clipboard history back to the file
+    with open(json_file, "w") as file:
+        json.dump(clipboard_data, file, indent=4)
+
+
 # Function will set new clipboard to paste that user selected from its list
 def attach_new_clipboard(to_paste):
     pyperclip.copy(to_paste)
