@@ -2,7 +2,7 @@ import threading
 
 import pystray
 import PIL.Image
-import clipboard
+import clipboard_manager
 import GUI
 image = PIL.Image.open("images/testLogo.png")
 
@@ -11,7 +11,7 @@ def on_click(icon, item):
 
     if str(item) == "Start":
         # Start clipboard monitoring in a background thread
-        clipboard_thread = threading.Thread(target=clipboard.check_clipboard)  # Pass window to the thread
+        clipboard_thread = threading.Thread(target=clipboard_manager.check_clipboard)  # Pass window to the thread
         clipboard_thread.start()
 
     elif str(item) == "My clipboards":

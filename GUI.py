@@ -1,10 +1,12 @@
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
-                             QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea
-, QCheckBox, QHBoxLayout, QSizePolicy, QMessageBox)
+                             QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea,
+                             QCheckBox, QHBoxLayout, QSizePolicy, QMessageBox)
 import sys
-import clipboard
+
+# Import our new clipboard manager
+from clipboard_manager import ClipboardManager, ClipboardTextEntry, attach_new_clipboard
 
 
 def show_message(message):
@@ -42,31 +44,26 @@ class ClipInFrame(QWidget):
     def __init__(self, clip):
         super().__init__()  # Initialize QWidget
         """Dynamically add a frame for a new clipboard entry"""
-        self.frame = QFrame(self)
-        # self.frame.setMinimumSize(QSize(200, 200))
-        # self.frame.setMaximumSize(QSize(200, 200))
+        self.frame = QFrame()
         self.frame.setFrameShape(QFrame.Shape.Box)
         self.frame.setLineWidth(3)
         self.frame.setStyleSheet("background-color: rgb(255,85,255);")
         self.clip = clip
+
         # Add content label
         label = QLabel(str(clip.content), self.frame)
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.checkbox = QCheckBox(self)
+
+        self.checkbox = QCheckBox(self.frame)
         self.checkbox.stateChanged.connect(self.on_checkbox_changed)  # type: ignore
         self.checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.frameSelected = False
-
-        # Remove button
-        # remove_button = QPushButton("Remove", frame)
-        # remove_button.clicked.connect(lambda: self.remove_clip(clip, frame))  # type: ignore
 
         # Layout for frame
         frame_layout = QHBoxLayout()
         frame_layout.addWidget(label)
         frame_layout.addWidget(self.checkbox)
-        # frame_layout.addWidget(remove_button)
         self.frame.setLayout(frame_layout)
 
     def on_checkbox_changed(self, state):
@@ -99,69 +96,104 @@ class ClipboardContainer(QWidget):
         self.scroll_content.setMouseTracking(True)
         self.scroll_content.installEventFilter(self)
 
-        self.clips = {}
-        self.records_json = clipboard.load_from_json_file()
-        self.frames = {}  # Store frames with their associated data
+        # Initialize the clipboard manager
+        self.clipboard_manager = ClipboardManager()
+
+        # Start clipboard monitoring in a separate thread
+        self.clipboard_manager.start_monitoring()
+
+        self.clips = {}  # {clip_id: ClipInFrame object}
+        self.frames = {}  # {clip_id: QFrame widget}
+
         # mouse event when press on frame
         self.pressPos = None
         self.clicked = QtCore.pyqtSignal()
 
+        # Populate UI with existing clips
         self.populate_clips()
-        print(self.frames)
-        # Timer to check for new clipboard content
+
+        # Timer to check for UI updates
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_for_updates)  # type: ignore
-        self.timer.start(2000)  # Check every 2 seconds
+        self.timer.start(1000)  # Check every second
 
     def populate_clips(self):
         """Create frames for existing clipboard content"""
-        for clip in self.records_json:
+        # Clear existing frames first for safety
+        for frame in self.frames.values():
+            self.scroll_layout.removeWidget(frame)
+            if frame is not None:
+                frame.deleteLater()
+
+        self.frames.clear()
+        self.clips.clear()
+
+        # Get all entries from manager
+        entries = self.clipboard_manager.get_all_entries()
+
+        # Add frames for all entries
+        for clip in entries:
             clip_frame = ClipInFrame(clip)
-            # Add frame to layout and store reference
-            self.scroll_layout.addWidget(clip_frame.frame)
+            self.scroll_layout.insertWidget(0, clip_frame.frame)  # Add newest first at the top
             self.frames[clip.id] = clip_frame.frame
-            self.clips[clip.id] = clip_frame  # Store the whole ClipInFrame, not just the frame
+            self.clips[clip.id] = clip_frame
 
     def check_for_updates(self):
-        """Check if clipboard file has new entries"""
-        new_clips = clipboard.load_from_json_file()
+        """Check for changes in clipboard entries"""
+        # Reload entries from manager
+        self.clipboard_manager.load_entries()
+        current_entries = self.clipboard_manager.get_all_entries()
 
-        # If the number of records_json has increased, process new records_json
-        if len(new_clips) > len(self.records_json):
-            for clip in new_clips:
-                if clip.id not in self.frames:  # Only add new records_json that don't have a frame yet
-                    clip_frame = ClipInFrame(clip)  # or use i if you want to keep index
-                    self.frames[clip.id] = clip_frame  # Store reference in frames dictionary
-                    self.clips[clip.id] = clip_frame  # Store the whole ClipInFrame, not just the frame
-                    self.scroll_layout.addWidget(clip_frame.frame)  # Add the frame to layout
+        # Get current IDs in UI and in data
+        ui_ids = set(self.frames.keys())
+        data_ids = {entry.id for entry in current_entries}
 
-            self.records_json = new_clips  # Update internal list of records_json
-            self.scroll_area.setWidgetResizable(True)  # Ensure the scroll area resizes when new widgets are added
-            self.scroll_content.setMinimumHeight(self.scroll_layout.sizeHint().height())  # Update scroll content size
-            # self.populate_clips()
+        # Handle removed entries
+        for clip_id in (ui_ids - data_ids):
+            if clip_id in self.frames:
+                frame = self.frames[clip_id]
+                self.scroll_layout.removeWidget(frame)
+                frame.deleteLater()
+                del self.frames[clip_id]
+                del self.clips[clip_id]
 
+        # Handle new entries
+        for entry in current_entries:
+            if entry.id not in ui_ids:
+                clip_frame = ClipInFrame(entry)
+                self.scroll_layout.insertWidget(0, clip_frame.frame)  # Add at top
+                self.frames[entry.id] = clip_frame.frame
+                self.clips[entry.id] = clip_frame
+
+        # Update scroll area sizing
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_content.setMinimumHeight(self.scroll_layout.sizeHint().height())
+
+
+    # this function will delete selected clipboards that user want to delete
     def toggle_delete_mode(self):
         to_delete = []  # Collect items to delete first
 
-        for clip_id, frame in list(self.clips.items()):  # Loop through frames by clip_id
-            if self.clips[clip_id].frameSelected:
+        for clip_id, clip_frame in self.clips.items():
+            if clip_frame.frameSelected:
                 to_delete.append(clip_id)  # Store the ID for deletion
-        # if the list is empty messagebox will appear
+
+        # If the list is empty, messagebox will appear
         if not to_delete:
             show_message("Please select items to delete from the clipboard")
+            return
 
+        # Delete from manager (handles file saving too)
+        self.clipboard_manager.delete_entries(to_delete)
+
+        # Update UI
         for clip_id in to_delete:
-            frame = self.clips[clip_id].frame  # Store reference before deleting
-
-            # Remove from layout and delete the widget
-            self.scroll_layout.removeWidget(frame)
-            frame.deleteLater()  # Properly delete the frame
-            # Remove from dictionary
-            del self.clips[clip_id]
-            del self.frames[clip_id]
-
-            # Remove from clipboard JSON
-            clipboard.remove_entries_by_id("clipboard_history.json", clip_id)
+            if clip_id in self.frames:
+                frame = self.frames[clip_id]
+                self.scroll_layout.removeWidget(frame)
+                frame.deleteLater()
+                del self.frames[clip_id]
+                del self.clips[clip_id]
 
     def mousePressEvent(self, event):
         # First, get the position relative to the scroll_content widget
@@ -204,32 +236,26 @@ class ClipboardContainer(QWidget):
 
     def find_frame(self):
         try:
-
             if self.pressPos is None:
                 return
 
-            for clip_id, frame in self.frames.items():  # Loop through frames by clip_id
-
-                clip_frame = self.frames[clip_id]
-                print(clip_id)
-                frame_position = clip_frame.pos()
-                print(f"Frame Position: {frame_position.x()}, {frame_position.y()}")
-
+            for clip_id, frame in self.frames.items():
                 frame_position = frame.pos()
                 print(f"Frame Position: {frame_position.x()}, {frame_position.y()}")
-
                 print(f"Frame size: {frame.width()} x {frame.height()}")
 
                 frame_rect = QRect(frame_position.x(), frame_position.y(), frame.width(), frame.height())
                 if frame_rect.contains(self.pressPos):  # Check if the click is inside the frame
                     print(f"Clicked on frame: {clip_id}")
 
-                    # Set the selected clip
-                    self.selected_clip = self.clips[clip_id].clip.content  # Store the selected clip
-                    print(f"Selected clip content: {self.selected_clip}")
-                    clipboard.attach_new_clipboard(self.selected_clip)
+                    # Get the content and copy to system clipboard
+                    entry = self.clipboard_manager.get_entry_by_id(clip_id)
+                    if entry:
+                        self.selected_clip = entry.content
+                        print(f"Selected clip content: {self.selected_clip[:30]}...")
+                        attach_new_clipboard(self.selected_clip)
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error finding frame: {e}")
 
 
 class MainWindow(QMainWindow):
@@ -238,9 +264,6 @@ class MainWindow(QMainWindow):
         self.frame = None
         self.setWindowTitle("ClipSavvy")
         self.setContentsMargins(20, 20, 20, 20)
-        # self.setMinimumSize(400, 700)
-
-
 
         # Create a central widget
         self.centralWidget = QWidget()
@@ -252,7 +275,6 @@ class MainWindow(QMainWindow):
 
         self.masterLayout = QGridLayout()
         self.masterLayout.addLayout(self.menuLayout, 0, 0)
-        # self.masterLayout.addLayout(self.masterFrame, 1, 0)
 
         # Buttons
         self.text_button = QPushButton(text="Text")
@@ -264,17 +286,16 @@ class MainWindow(QMainWindow):
         self.menuLayout.addWidget(self.delete_button, 0, 0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.image_button, 1, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.settings_button, 0, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
-        clipboardContainer = ClipboardContainer()
-        self.masterLayout.addWidget(clipboardContainer)
 
-        # Initialize QTimer
-        # self.timer = QTimer(self)  # Create a timer associated with the window
-        # self.timer.timeout.connect(ClipboardContainer.check_for_updates(self))   # type: ignore
-        # self.timer.start(1000)  # Start the timer and check every 1 second (1000 ms)
+        # Create and add the clipboard container
+        self.clipboardContainer = ClipboardContainer()
+        self.masterLayout.addWidget(self.clipboardContainer)
 
         # Set the layout on the central widget
         self.centralWidget.setLayout(self.masterLayout)
-        self.delete_button.clicked.connect(clipboardContainer.toggle_delete_mode)  # type: ignore
+
+        # Connect the delete button to the container's toggle_delete_mode method
+        self.delete_button.clicked.connect(self.clipboardContainer.toggle_delete_mode)  # type: ignore
 
 
 def start_gui():
@@ -284,4 +305,5 @@ def start_gui():
     sys.exit(app.exec())
 
 
-
+if __name__ == "__main__":
+    start_gui()
