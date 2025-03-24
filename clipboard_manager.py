@@ -2,6 +2,7 @@
 import base64
 import io
 import os
+import sys
 import time
 import uuid
 import json
@@ -10,8 +11,6 @@ from datetime import datetime
 
 import pyperclip
 from PIL import ImageGrab, Image
-
-JSON_FILE = "clipboard_history.json"
 
 
 class ClipboardManager:
@@ -24,12 +23,12 @@ class ClipboardManager:
             cls._instance.initialized = False
         return cls._instance
 
-    def __init__(self, json_file=JSON_FILE):
+    def __init__(self):
         # Only initialize once
         if self.initialized:
             return
 
-        self.json_file = json_file
+        self.json_file = save_file_in_appdata('ClipSavvy','clipboard_history.json')
         self.entries = []
         self.last_save_time = time.time()
         self.save_interval = 2  # Save every 2 seconds if changes
@@ -57,7 +56,7 @@ class ClipboardManager:
             self.changes_pending = False
             print(f"Saved {len(data)} entries to JSON file: {self.json_file}")
 
-    def is_entry_exist(self ,content):
+    def is_entry_exist(self, content):
 
         for entry in self.entries:
             if content == entry.content:
@@ -109,6 +108,7 @@ class ClipboardManager:
             self.changes_pending = True
             # Force save after deletion
             self.save_entries(force=True)
+            pyperclip.copy("")
             return True
         return False
 
@@ -136,11 +136,11 @@ class ClipboardManager:
     def _monitor_clipboard(self):
         """Background thread function to monitor clipboard changes"""
         last_clipboard_content = ""
-
+        last_img_content = ""
         while self.monitoring_active:
             try:
                 current_clipboard_content = pyperclip.paste()
-
+                img = ImageGrab.grabclipboard()
                 # Only process if content changed and is not empty
                 if not self.is_entry_exist(current_clipboard_content):
                     print(f"Clipboard changed: {current_clipboard_content[:30]}...")
@@ -148,6 +148,13 @@ class ClipboardManager:
 
                     # Add to manager
                     self.add_entry(current_clipboard_content)
+
+                if not self.is_entry_exist(current_clipboard_content):
+                    print(f"Clipboard changed: {current_clipboard_content[:30]}...")
+                    last_img_content = current_clipboard_content
+
+                    # Add to manager
+                    self.add_entry(last_img_content)
 
                 # Periodically try to save any pending changes
                 self.save_entries()
@@ -188,7 +195,18 @@ def save_to_json_file(clipboard_entry):
     manager.add_entry(clipboard_entry.content)
 
 
-def load_from_json_file(filename=JSON_FILE):
+
+def get_appdata_path():
+    appdata_path = os.getenv("APPDATA")  # This gets the Roaming AppData folder
+    print(appdata_path)
+
+    file_path = os.path.join(appdata_path, "ClipSavvy", "clipboard_history.json")
+    print(file_path)
+    return file_path
+
+
+
+def load_from_json_file(filename=get_appdata_path()):
     """Load clipboard history from a JSON file."""
     try:
         with open(filename, "r") as file:
@@ -203,7 +221,6 @@ def remove_entries_by_id(json_file, ids_to_delete):
     """Remove entries by ID"""
     if isinstance(ids_to_delete, str):  # If single ID passed as string
         ids_to_delete = [ids_to_delete]
-
     manager = ClipboardManager(json_file)
     manager.delete_entries(ids_to_delete)
 
@@ -217,3 +234,53 @@ def attach_new_clipboard(to_paste):
 def check_clipboard():
     manager = ClipboardManager()
     manager.start_monitoring()
+
+
+
+
+
+def determine_user_data_directory():
+    """
+    Get the appropriate AppData directory based on the operating system.
+
+    Returns:
+    str: Path to the user's application data directory
+    """
+    if sys.platform == 'win32':
+        # Windows: Use %APPDATA%
+        return os.path.join(os.getenv('APPDATA'))
+    elif sys.platform == 'darwin':
+        # macOS: Use ~/Library/Application Support
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support')
+    else:
+        # Linux: Use ~/.config
+        return os.path.join(os.path.expanduser('~'), '.config')
+
+
+def save_file_in_appdata(app_name, filename):
+    """
+    Save a file in the application's specific AppData directory.
+
+    Args:
+    app_name (str): Name of your application
+    filename (str): Name of the file to save
+
+    Returns:
+    str: Full path to the saved file
+    """
+    # Get the base AppData path
+    appdata_base = determine_user_data_directory()
+
+    # Create application-specific directory
+    app_dir = os.path.join(appdata_base, app_name)
+
+    # Create the directory if it doesn't exist
+    os.makedirs(app_dir, exist_ok=True)
+
+    # Full path to the file
+    full_path = os.path.join(app_dir, filename)
+
+
+    return full_path
+
+

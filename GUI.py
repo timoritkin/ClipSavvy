@@ -1,8 +1,9 @@
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QTimer, QRect
+from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
                              QGridLayout, QVBoxLayout, QLabel, QFrame, QScrollArea,
-                             QCheckBox, QHBoxLayout, QSizePolicy, QMessageBox)
+                             QCheckBox, QHBoxLayout, QSizePolicy, QMessageBox, QStackedWidget)
 import sys
 
 # Import our new clipboard manager
@@ -37,6 +38,33 @@ class Mouse(QtCore.QObject):
                 event.pos() in self.rect()):
             self.clicked.emit()
         self.pressPos = None
+
+
+class DynamicContentWidget(QWidget):
+    """Base class for different content pages"""
+
+    def __init__(self, color, text):
+        super().__init__()
+        layout = QVBoxLayout()
+
+        # Create a colored frame
+        frame = QFrame(self)
+        frame.setAutoFillBackground(True)
+        palette = frame.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(color))
+        frame.setPalette(palette)
+        frame.setFrameShape(QFrame.Shape.Box)
+        frame.setFrameShadow(QFrame.Shadow.Raised)
+
+        # Layout for the frame
+        frame_layout = QVBoxLayout()
+        label = QLabel(text)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(label)
+        frame.setLayout(frame_layout)
+
+        layout.addWidget(frame)
+        self.setLayout(layout)
 
 
 # this class will set the clipboard data into frame
@@ -169,7 +197,6 @@ class ClipboardContainer(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_content.setMinimumHeight(self.scroll_layout.sizeHint().height())
 
-
     # this function will delete selected clipboards that user want to delete
     def toggle_delete_mode(self):
         to_delete = []  # Collect items to delete first
@@ -282,20 +309,47 @@ class MainWindow(QMainWindow):
         self.image_button = QPushButton("Images")
         self.settings_button = QPushButton("Settings")
 
+        # connect buttons
+        self.text_button.clicked.connect(self.show_previous_page)  # type: ignore
+        self.image_button.clicked.connect(self.show_next_page)  # type: ignore
         self.menuLayout.addWidget(self.text_button, 1, 0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.delete_button, 0, 0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.image_button, 1, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
         self.menuLayout.addWidget(self.settings_button, 0, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
 
+        # Stacked widget to hold different content pages
+        self.stacked_widget = QStackedWidget()
+
         # Create and add the clipboard container
-        self.clipboardContainer = ClipboardContainer()
-        self.masterLayout.addWidget(self.clipboardContainer)
+        self.text_based_clipboard = ClipboardContainer()
+        self.page2 = DynamicContentWidget("lightgreen", "Second Page\nMultiple Layouts Supported")
+        self.stacked_widget.addWidget(self.text_based_clipboard)
+        self.stacked_widget.addWidget(self.page2)
+        self.masterLayout.addWidget(self.stacked_widget)
 
         # Set the layout on the central widget
         self.centralWidget.setLayout(self.masterLayout)
 
         # Connect the delete button to the container's toggle_delete_mode method
-        self.delete_button.clicked.connect(self.clipboardContainer.toggle_delete_mode)  # type: ignore
+        self.delete_button.clicked.connect(self.text_based_clipboard.toggle_delete_mode)  # type: ignore
+
+    def show_previous_page(self):
+        """Navigate to the previous page"""
+        current_index = self.stacked_widget.currentIndex()
+        total_pages = self.stacked_widget.count()
+
+        # Circular navigation
+        new_index = (current_index - 1 + total_pages) % total_pages
+        self.stacked_widget.setCurrentIndex(new_index)
+
+    def show_next_page(self):
+        """Navigate to the next page"""
+        current_index = self.stacked_widget.currentIndex()
+        total_pages = self.stacked_widget.count()
+
+        # Circular navigation
+        new_index = (current_index + 1) % total_pages
+        self.stacked_widget.setCurrentIndex(new_index)
 
 
 def start_gui():
